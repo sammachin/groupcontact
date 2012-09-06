@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<head>    
+
+	<title>Group Contact</title>
+	<script src="http://code.jquery.com/jquery-latest.js"></script>
+	<script>
+	$(document).ready(function(){
+		$("#join").bind('submit', function(e){
+			e.preventDefault();
+			$.post("/joingroup", $("#join").serialize());
+		})
+	})
+	</script>
+</head>
+<body>
+	<div id="wrapper">
+		<header role="banner">
+			<h1>Join Group</h1>
+		</header>
+
+		<section>
+			<form id="join" name="join">
+				<fieldset><legend>Send Message</legend>
+					<label for="channel">Group</label>
+					<input type="text" name="group" size="12" placeholder="group" />
+					<label>Number</label>
+					<input type="text" name ="msisdn" size="160" placeholder="MSISDN" />
+				<input type="submit" value="send">
+		</section>
+		
+		<footer>
+			<p>Created by <a href="http://sammachin.com:">Sam Machin</a></p>
+		</footer>
+	</div>
+</body>
+
