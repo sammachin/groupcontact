@@ -33,9 +33,7 @@ import unicodedata, re
 import urllib
 import gspread
 
-
-
-def getmembers(group, sheet):
+def getmembersold(group, sheet):
 	gc = gspread.login(creds.googleuser, creds.googlepass)
 	spreadsheet = gc.open(sheet)
 	worksheet = spreadsheet.sheet1
@@ -44,8 +42,21 @@ def getmembers(group, sheet):
 		if worksheet.col_values(2)[x] == group:
 			members.append(worksheet.col_values(1)[x])
 	return members
-	
 
+
+def getmembers(group, sheet):
+	gc = gspread.login(creds.googleuser, creds.googlepass)
+	spreadsheet = gc.open(sheet)
+	worksheet = spreadsheet.sheet1
+	cell_list = worksheet.findall(group)
+	numbers = worksheet.range('A2:A%s' % len(worksheet.col_values(1)))
+	members = []
+	for cell in cell_list:
+		x = cell.row -2
+		members.append(numbers[x].value)
+	return members
+	
+	
 def getallmembers(sheet):
 	gc = gspread.login(creds.googleuser, creds.googlepass)
 	spreadsheet = gc.open(sheet)
@@ -82,32 +93,12 @@ class sendsms(webapp2.RequestHandler):
 			members = getmembers(group, "groups")
 			client = TwilioRestClient(creds.twilioaccount, creds.twiliotoken)
 			for member in members:
-				client.sms.messages.create(from_="+441172001500", to=member, body=message)
+				client.sms.messages.create(from_="+441173251773", to=member, body=message)
 			self.response.out.write("SMS sent to %s members of %s" % (str(len(members)), group))
 		else:
 			self.redirect(users.create_login_url(self.request.uri))
 
 
-class smsall(webapp2.RequestHandler):
-	def get(self):
-		if users.get_current_user():
-			template_values = {}
-			path = os.path.join(os.path.dirname(__file__), 'sendsms.html')
-			self.response.out.write(template.render(path, template_values))
-		else:
-			self.redirect(users.create_login_url(self.request.uri))
-	def post(self):
-		if users.get_current_user():
-			group = self.request.get('group')	
-			message = self.request.get('message')
-			members = getallmembers("groups")
-			client = TwilioRestClient(creds.twilioaccount, creds.twiliotoken)
-			for member in members:
-				client.sms.messages.create(from_="+441172001500", to=member, body=message)
-				self.response.out.write("SMS sent to %s members " % (str(len(members))))
-		else:
-			self.redirect(users.create_login_url(self.request.uri))
-						
 						
 class groupcall(webapp2.RequestHandler):
 	def get(self):
@@ -124,7 +115,7 @@ class groupcall(webapp2.RequestHandler):
 			members = getmembers(group, "groups")
 			client = TwilioRestClient(creds.twilioaccount, creds.twiliotoken)
 			for member in members:
-				client.calls.create(from_="+441172001500", to=member, url="http://opshout.appspot.com/callone?msgid=%s" % (message))
+				client.calls.create(from_="+441173251784", to=member, url="http://opshout.appspot.com/callone?msgid=%s" % (message))
 			self.response.out.write("Calls placed to %s members of %s" % (str(len(members)), group))
 		else:
 			self.redirect(users.create_login_url(self.request.uri))
@@ -142,7 +133,13 @@ class incommingcall(webapp2.RequestHandler):
 	def post(self):
 		r = twiml.Response()
 		r.say("We will contact you when we are ready, do not call this number again")
-		self.response.out.write(str(r))			
+		self.response.out.write(str(r))
+
+class incommingsms(webapp2.RequestHandler):
+	def post(self):
+		r = twiml.Response()
+		r.sms("We will contact you when we are ready, do not text this number again")
+		self.response.out.write(str(r))
 
 
 class recordcall(webapp2.RequestHandler):
@@ -167,8 +164,6 @@ class storerecording(webapp2.RequestHandler):
 		r.say("Thankyou, goodbye")
 		self.response.out.write(str(r))
 						
-						
-						
 
 class MainHandler(webapp2.RequestHandler):
     def get(self):
@@ -176,10 +171,10 @@ class MainHandler(webapp2.RequestHandler):
 
 app = webapp2.WSGIApplication([('/', MainHandler),
 								('/sendsms', sendsms),
-								('/smsmall', smsall),
 								('/groupcall', groupcall),
 								('/callone', callone),
 								('/incommingcall', incommingcall),
+								('/incommingsms', incommingsms),
 								('/recordcall', recordcall),
 								('/storerecording', storerecording)
 								],
