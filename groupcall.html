@@ -1,13 +1,16 @@
 <!DOCTYPE html>
 <head>    
 
-	<title>Group Contact</title>
+	<title>Group Call</title>
 	<script src="http://code.jquery.com/jquery-latest.js"></script>
 	<script>
 	$(document).ready(function(){
 		$("#join").bind('submit', function(e){
 			e.preventDefault();
-			$.post("/joingroup", $("#join").serialize());
+			$("#result").empty().append("Sending");
+			$.post("/groupcall", $("#join").serialize(), function(data) {
+			  $("#result").empty().append(data);}
+			);
 		})
 	})
 	</script>
@@ -15,17 +18,22 @@
 <body>
 	<div id="wrapper">
 		<header role="banner">
-			<h1>Join Group</h1>
+			<h1>GroupCall</h1>
 		</header>
 
 		<section>
 			<form id="join" name="join">
-				<fieldset><legend>Send Message</legend>
+				<fieldset><legend>Call the group and play a message</legend>
 					<label for="channel">Group</label>
 					<input type="text" name="group" size="12" placeholder="group" />
-					<label>Number</label>
-					<input type="text" name ="msisdn" size="160" placeholder="MSISDN" />
+					<label>Message ID Number</label>
+					<input type="text" name ="message" size="2" placeholder="id" />
 				<input type="submit" value="send">
+		</section>
+		<section>
+			<fieldset><legend>Status</legend>
+				<div id="result">
+				</div>
 		</section>
 		
 		<footer>

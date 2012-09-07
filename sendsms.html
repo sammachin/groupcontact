@@ -7,7 +7,10 @@
 	$(document).ready(function(){
 		$("#join").bind('submit', function(e){
 			e.preventDefault();
-			$.post("/sendsms", $("#join").serialize());
+			$("#result").empty().append("Sending");
+			$.post("/sendsms", $("#join").serialize(), function(data) {
+			  $("#result").empty().append(data);}
+			);
 		})
 	})
 	</script>
@@ -26,6 +29,11 @@
 					<label>Message</label>
 					<input type="text" id="message" name ="message" size="160" placeholder="message" />
 				<input type="submit" value="send">
+		</section>
+		<section>
+			<fieldset><legend>Status</legend>
+				<div id="result">
+				</div>
 		</section>
 		
 		<footer>
