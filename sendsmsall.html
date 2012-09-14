@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<head>    
+
+	<title>SendSMS</title>
+	<script src="http://code.jquery.com/jquery-latest.js"></script>
+	<script>
+	$(document).ready(function(){
+		$("#join").bind('submit', function(e){
+			e.preventDefault();
+			$("#result").empty().append("Sending");
+			$.post("/sendsmsall", $("#join").serialize(), function(data) {
+			  $("#result").empty().append(data);}
+			);
+		})
+	})
+	</script>
+</head>
+<body>
+	<div id="wrapper">
+		<header role="banner">
+			<h1>SendSMS to All</h1>
+		</header>
+
+		<section>
+			<form id="join" name="join">
+				<fieldset><legend>Send Message</legend>
+					<label>Message</label>
+					<input type="text" id="message" name ="message" size="160" placeholder="message" />
+				<input type="submit" value="send">
+		</section>
+		<section>
+			<fieldset><legend>Status</legend>
+				<div id="result">
+				</div>
+		</section>
+		
+		<footer>
+			<p>Created by <a href="http://sammachin.com:">Sam Machin</a></p>
+		</footer>
+	</div>
+</body>
+

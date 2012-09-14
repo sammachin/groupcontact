@@ -25,6 +25,7 @@ from google.appengine.ext import db
 from google.appengine.api import memcache
 from google.appengine.api import urlfetch
 from google.appengine.api import mail
+from google.appengine.api import taskqueue
 import os
 from google.appengine.ext.webapp import template
 import sys
@@ -32,16 +33,8 @@ import string
 import unicodedata, re
 import urllib
 import gspread
+import json
 
-def getmembersold(group, sheet):
-	gc = gspread.login(creds.googleuser, creds.googlepass)
-	spreadsheet = gc.open(sheet)
-	worksheet = spreadsheet.sheet1
-	members = []
-	for x in range(1, len(worksheet.col_values(1))):
-		if worksheet.col_values(2)[x] == group:
-			members.append(worksheet.col_values(1)[x])
-	return members
 
 
 def getmembers(group, sheet):
@@ -61,9 +54,10 @@ def getallmembers(sheet):
 	gc = gspread.login(creds.googleuser, creds.googlepass)
 	spreadsheet = gc.open(sheet)
 	worksheet = spreadsheet.sheet1
+	numbers = worksheet.range('A2:A%s' % len(worksheet.col_values(1)))
 	members = []
-	for x in range(1, len(worksheet.col_values(1))):
-		members.append(worksheet.col_values(1)[x])
+	for number in numbers:
+		members.append(number.value)
 	return members
 		
 		
@@ -77,30 +71,98 @@ def geturl(msgid, sheet):
 			url = worksheet.col_values(2)[x]
 	return url
 
+
+class AuthorizedUser(db.Model):
+	user = db.UserProperty()
+
+class PendingUser(db.Model):
+	user = db.UserProperty()
+
+
+class AuthorizedRequestHandler(webapp2.RequestHandler):
+	def authorize(self):
+		user = users.get_current_user()
+		if not user:
+			self.not_logged_in()
+		else:
+			auth_user = AuthorizedUser.gql("where user = :1", user).get()
+			if not auth_user:
+				self.unauthorized_user()
+			else:
+				return True
+	def not_logged_in(self):
+		self.redirect(users.create_login_url(self.request.uri))
+	def unauthorized_user(self):
+		self.response.out.write("""
+	           	<html>
+	              <body>
+	                <div>Unauthorized User</div>
+	                <div><a href="%s">Logout</a><br>
+	                <a href="/reqauth">Request Authorisation</a></div>
+	              </body>
+	            </html>""" % users.create_logout_url(self.request.uri))
+
+
+class ReqAuth(webapp2.RequestHandler):
+     def get(self):
+        user = users.get_current_user()
+        auth_user = PendingUser()
+        auth_user.user = user
+        auth_user.put()
+        self.response.out.write('Access requested for ' + str(user))
+	
+	
+class submitmessages(AuthorizedRequestHandler):
+	def post(self):
+		memberslist = self.request.get('members')	
+		members = json.loads(memberslist)
+		message = self.request.get('message')
+		client = TwilioRestClient(creds.twilioaccount, creds.twiliotoken)
+		for member in members:
+			client.sms.messages.create(from_=creds.smsnumber, to=member, body=message)
 		
-class sendsms(webapp2.RequestHandler):
+class makecalls(AuthorizedRequestHandler):
+	def post(self):
+		memberslist = self.request.get('members')	
+		members = json.loads(memberslist)
+		message = self.request.get('message')
+		client = TwilioRestClient(creds.twilioaccount, creds.twiliotoken)
+		for member in members:
+			client.calls.create(from_=creds.voicenumber, to=member, url="http://opshout.appspot.com/callone?msgid=%s" % (message))
+
+
+class sendsms(AuthorizedRequestHandler):
 	def get(self):
-		if users.get_current_user():
+		if self.authorize():
 			template_values = {}
 			path = os.path.join(os.path.dirname(__file__), 'sendsms.html')
 			self.response.out.write(template.render(path, template_values))
-		else:
-	            self.redirect(users.create_login_url(self.request.uri))
 	def post(self):
-		if users.get_current_user():
+		if self.authorize():
 			group = self.request.get('group')	
 			message = self.request.get('message')
 			members = getmembers(group, "groups")
-			client = TwilioRestClient(creds.twilioaccount, creds.twiliotoken)
-			for member in members:
-				client.sms.messages.create(from_="+441173251773", to=member, body=message)
+			taskqueue.add(url='/submitmessages', params = {'members': json.dumps(members), 'message' : message})
 			self.response.out.write("SMS sent to %s members of %s" % (str(len(members)), group))
+
+class sendsmsall(AuthorizedRequestHandler):
+	def get(self):
+		if users.get_current_user():
+			template_values = {}
+			path = os.path.join(os.path.dirname(__file__), 'sendsmsall.html')
+			self.response.out.write(template.render(path, template_values))
 		else:
 			self.redirect(users.create_login_url(self.request.uri))
-
-
-						
-class groupcall(webapp2.RequestHandler):
+	def post(self):
+		if users.get_current_user():
+			message = self.request.get('message')
+			members = getallmembers("groups")
+			taskqueue.add(url='/submitmessages', params = {'members': json.dumps(members), 'message' : message})
+			self.response.out.write("SMS sent to %s members" % (str(len(members))))
+		else:
+			self.redirect(users.create_login_url(self.request.uri))
+											
+class groupcall(AuthorizedRequestHandler):
 	def get(self):
 		if users.get_current_user():
 			template_values = {}
@@ -113,9 +175,7 @@ class groupcall(webapp2.RequestHandler):
 			group = self.request.get('group')	
 			message = self.request.get('message')
 			members = getmembers(group, "groups")
-			client = TwilioRestClient(creds.twilioaccount, creds.twiliotoken)
-			for member in members:
-				client.calls.create(from_="+441173251784", to=member, url="http://opshout.appspot.com/callone?msgid=%s" % (message))
+			taskqueue.add(url='/makecalls', params = {'members': json.dumps(members), 'message' : message})
 			self.response.out.write("Calls placed to %s members of %s" % (str(len(members)), group))
 		else:
 			self.redirect(users.create_login_url(self.request.uri))
@@ -128,6 +188,7 @@ class callone(webapp2.RequestHandler):
 		r = twiml.Response()
 		r.play(url)
 		self.response.out.write(str(r))
+
 
 class incommingcall(webapp2.RequestHandler):
 	def post(self):
@@ -172,10 +233,14 @@ class MainHandler(webapp2.RequestHandler):
 app = webapp2.WSGIApplication([('/', MainHandler),
 								('/sendsms', sendsms),
 								('/groupcall', groupcall),
+								('/sendsmsall', sendsmsall),
 								('/callone', callone),
 								('/incommingcall', incommingcall),
 								('/incommingsms', incommingsms),
 								('/recordcall', recordcall),
-								('/storerecording', storerecording)
+								('/storerecording', storerecording),
+								('/submitmessages', submitmessages),
+								('/makecalls', makecalls),
+								('/reqauth', ReqAuth)
 								],
                               debug=True)
